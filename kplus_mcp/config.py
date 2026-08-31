@@ -113,8 +113,11 @@ DOC_CHUNK = int(os.environ.get("KPLUS_DOC_CHUNK", "20000"))
 NAV_TIMEOUT_MS = int(os.environ.get("KPLUS_NAV_TIMEOUT_MS", "45000"))
 LOGIN_WAIT_S = int(os.environ.get("KPLUS_LOGIN_WAIT_S", "300"))
 
-# Больше вкладок агенту не нужно, а забытые вкладки едят память.
-MAX_TABS = int(os.environ.get("KPLUS_MAX_TABS", "4"))
+# Одна вкладка, а не четыре. Лицензия К+ разрешает один сеанс на одного
+# пользователя, и хотя вкладки одного профиля делят куки и считаются одним
+# входом, работа строго в одном окне и одной вкладке не оставляет места
+# для случайного второго сеанса.
+MAX_TABS = int(os.environ.get("KPLUS_MAX_TABS", "1"))
 
 # Предохранитель от зацикливания: агент не может работать дольше и больше.
 MAX_STEPS = int(os.environ.get("KPLUS_MAX_STEPS", "30"))

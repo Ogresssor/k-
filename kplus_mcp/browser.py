@@ -81,6 +81,76 @@ def _cdp_alive(timeout: float = 0.6) -> bool:
         return False
 
 
+def _pid_alive(pid: int) -> bool:
+    """Жив ли процесс с таким номером."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True          # чужой процесс, но живой
+    return True
+
+
+def _claim_session() -> None:
+    """Занять исключительное право работать с К+. Один агент на машину.
+
+    Лицензия К+ разрешает один сеанс на пользователя и считает второе окно
+    вторым устройством. Но дело не только в лицензии: два агента в одном
+    окне дерутся за одну вкладку, и переходы обрывают друг друга.
+
+    Поэтому право работать берётся атомарно — созданием файла, которое
+    операционная система выполняет только для одного процесса. Если файл
+    остался от процесса, который уже умер, забираем его себе.
+    """
+    lock = config.DATA_DIR / "session.lock"
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return
+        except FileExistsError:
+            pass
+
+        try:
+            owner = int(lock.read_text(encoding="utf-8").strip() or 0)
+        except (OSError, ValueError):
+            owner = 0
+
+        if owner == os.getpid():
+            return
+        if not _pid_alive(owner):
+            log_event(f"Замок остался от умершего процесса {owner} — забираю")
+            lock.unlink(missing_ok=True)
+            continue
+
+        raise RuntimeError(
+            "Программа К+ уже работает в другом окне и занимает сеанс. "
+            "Закройте её и повторите: КонсультантПлюс разрешает только один "
+            "сеанс, а два считает за двух пользователей."
+        )
+
+
+def _release_session() -> None:
+    lock = config.DATA_DIR / "session.lock"
+    try:
+        if int(lock.read_text(encoding="utf-8").strip() or 0) == os.getpid():
+            lock.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        pass
+
+
 def _spawn_browser() -> None:
     """Открыть браузер отдельным процессом и отвязаться от него.
 
@@ -149,6 +219,8 @@ async def context() -> BrowserContext:
         if _ctx is not None:
             return _ctx
         _bypass_proxy_for_localhost()
+        config.ensure_dirs()
+        _claim_session()
         if _cdp_alive():
             log_event("Подключаюсь к уже открытому браузеру")
         else:
@@ -187,6 +259,7 @@ async def shutdown() -> None:
     остановить драйвер — сокет закроется, окно останется.
     """
     global _pw, _browser, _ctx
+    _release_session()
     _ctx = None
     _browser = None
     if _pw is not None:

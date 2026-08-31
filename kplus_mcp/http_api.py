@@ -23,7 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from . import config, tools
+from . import browser, config, tools
 from .agent import LOCAL_PROVIDERS, PROVIDERS, run
 
 HOST = os.environ.get("KPLUS_HTTP_HOST", "127.0.0.1")
@@ -121,6 +121,17 @@ def _model_ready() -> tuple[str, bool]:
     return name, bool(os.environ.get(provider.key_env, "").strip())
 
 
+async def close_session(_: Request) -> JSONResponse:
+    """Закрыть окно К+ и освободить сеанс.
+
+    Нужно именно закрывать: пока окно живо, К+ считает сеанс занятым, и
+    вход с другого устройства будет выглядеть как второй пользователь.
+    """
+    await browser.shutdown()
+    browser.quit_browser()
+    return JSONResponse({"ok": True, "session_open": False})
+
+
 async def health(_: Request) -> JSONResponse:
     """Оболочка дёргает это, пока не ответит, — так она понимает, что готово."""
     provider, has_key = _model_ready()
@@ -133,6 +144,9 @@ async def health(_: Request) -> JSONResponse:
         "base_dir": str(config.BASE_DIR),
         "provider": provider,
         "model_key": has_key,
+        # Открыто ли сейчас окно К+. Пока открыто — сеанс занят, и второй
+        # вход в К+ где угодно ещё будет считаться вторым пользователем.
+        "session_open": browser._cdp_alive(),
     })
 
 
@@ -142,6 +156,7 @@ app = Starlette(routes=[
     Route("/call", call_tool, methods=["POST"]),
     Route("/ask", ask, methods=["POST"]),
     Route("/ask/stream", ask_stream, methods=["POST"]),
+    Route("/session/close", close_session, methods=["POST"]),
 ])
 
 

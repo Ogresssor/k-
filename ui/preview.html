@@ -217,6 +217,7 @@
     <div class="toolbar">
       <span class="brand">К+</span>
       <button class="ghost" id="docs">Документы</button>
+      <button class="ghost" id="close-session">Завершить сеанс К+</button>
       <span class="state" id="status">готов · Google Chrome</span>
     </div>
 
@@ -254,6 +255,10 @@
     <div class="note">
       <h2>Браузер — уже ваш</h2>
       <p>Приложение находит установленный Chrome, Edge, Brave, Yandex или Arc. Скачивать браузер оно не умеет и не будет.</p>
+    </div>
+    <div class="note">
+      <h2>Один сеанс К+</h2>
+      <p>Лицензия разрешает один сеанс на пользователя. Программа работает строго в одном окне, второй запуск получает отказ, а кнопка в шапке освобождает сеанс.</p>
     </div>
   </div>
 </div>
@@ -356,6 +361,12 @@
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 150) + "px";
   });
+
+  document.getElementById("close-session").onclick = (e) => {
+    e.target.hidden = true;
+    statusEl.textContent = "сеанс К+ освобождён";
+    setTimeout(() => { statusEl.textContent = "готов · Google Chrome"; }, 2600);
+  };
 
   document.getElementById("docs").onclick = () => {
     statusEl.textContent = "в приложении откроется папка «Документы» рядом с ним";

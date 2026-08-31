@@ -97,6 +97,7 @@
 <header>
   <span class="title">К+</span>
   <button class="ghost" id="docs">Документы</button>
+  <button class="ghost" id="close-session" hidden>Завершить сеанс К+</button>
   <span class="status" id="status"><span class="spin"></span>запускаю…</span>
 </header>
 
@@ -210,6 +211,7 @@ async function boot() {
         statusEl.className = "status";
         statusEl.textContent = name ? "готов · " + name : "готов · браузер не найден";
         setBusy(false);
+        closeBtn.hidden = !h.session_open;
         report(true, name || "браузер не найден");
         return;
       }
@@ -287,6 +289,7 @@ async function ask(task) {
   }
   statusEl.textContent = "готов";
   setBusy(false);
+  refreshSession();
 }
 
 send.onclick = () => {
@@ -312,6 +315,36 @@ input.addEventListener("input", () => {
 document.getElementById("docs").onclick = () => {
   if (tauri) tauri.core.invoke("open_documents");
 };
+
+// Пока окно К+ открыто, КонсультантПлюс считает сеанс занятым, а любой
+// второй вход — вторым пользователем. Поэтому состояние сеанса видно
+// всегда, и завершить его можно одной кнопкой.
+const closeBtn = document.getElementById("close-session");
+
+async function refreshSession() {
+  if (!base) return;
+  try {
+    const r = await httpFetch(base + "/health");
+    if (r.ok) closeBtn.hidden = !(await r.json()).session_open;
+  } catch (e) {
+    // Не смогли спросить — оставляем кнопку как есть.
+  }
+}
+
+closeBtn.onclick = async () => {
+  closeBtn.disabled = true;
+  try {
+    await httpFetch(base + "/session/close", { method: "POST" });
+    closeBtn.hidden = true;
+    bubble("bot", "Окно К+ закрыто, сеанс освобождён. " +
+                  "При следующем вопросе оно откроется снова.");
+  } catch (e) {
+    bubble("bot err", "Не удалось закрыть окно К+: " + e);
+  }
+  closeBtn.disabled = false;
+};
+
+setInterval(refreshSession, 5000);
 
 // Любая необработанная ошибка при запуске не должна оставлять окно
 // в бесконечном «запускаю…».
