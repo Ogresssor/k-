@@ -237,6 +237,8 @@ jobs:
           cp -R "$BUNDLE/KPlus.app" "$PACK/"
           cp .env.example "$PACK/.env.example"
           cp "КАК ЗАПУСТИТЬ.md" "$PACK/"
+          cp "Удалить программу.command" "$PACK/"
+          chmod +x "$PACK/Удалить программу.command"
 
           # Проверочного .env с ключом-пустышкой в отправляемой папке быть
           # не должно.

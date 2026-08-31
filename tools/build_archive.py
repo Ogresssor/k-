@@ -30,6 +30,7 @@ CONTENTS = [
     "README.md", "ИНСТРУКЦИЯ.md", "КАК ЗАПУСТИТЬ.md", "PLAYBOOK.md",
     "kplus", "run_server.sh",
     "Настроить.command", "Собрать приложение.command",
+    "Удалить программу.command",
     "Спросить К+.command", "Отчёт об ошибке.command",
 ]
 
