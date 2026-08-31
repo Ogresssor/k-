@@ -76,6 +76,8 @@ jobs:
     name: Сборка приложения (.app и .dmg)
     runs-on: macos-15
     timeout-minutes: 45
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -245,6 +247,26 @@ jobs:
 
           # Убеждаемся, что бит x доехал.
           tar -tvzf KPlusAgent-portable.tar.gz             | grep "KPlus.app/Contents/MacOS/"             | head -5
+
+      - name: Обновить постоянную ссылку на скачивание
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Артефакты Actions требуют входа в GitHub и пропадают через 90
+          # дней. Релиз даёт постоянный прямой адрес, который можно просто
+          # переслать. Тег «latest» переписывается на каждой сборке.
+          NOTES="Готовое приложение для macOS, собранное из ветки main."
+          NOTES="$NOTES Ключа внутри нет: положите свой .env рядом с KPlus.app"
+          NOTES="$NOTES или воспользуйтесь tools/add_env.py."
+
+          if gh release view latest > /dev/null 2>&1; then
+            gh release upload latest KPlusAgent-portable.tar.gz --clobber
+          else
+            gh release create latest KPlusAgent-portable.tar.gz               --title "Последняя сборка" --notes "$NOTES" --prerelease
+          fi
+          echo "Скачивать здесь:"
+          echo "https://github.com/${{ github.repository }}/releases/latest/download/KPlusAgent-portable.tar.gz"
 
       - uses: actions/upload-artifact@v4
         with:
