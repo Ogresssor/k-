@@ -27,7 +27,7 @@ SKIP_SUFFIX = {".bak", ".pyc", ".log"}
 CONTENTS = [
     "kplus_mcp", "templates", "tests", "tools", "ui", "src-tauri",
     ".env.example", ".gitignore", "requirements.txt",
-    "README.md", "ИНСТРУКЦИЯ.md", "PLAYBOOK.md",
+    "README.md", "ИНСТРУКЦИЯ.md", "КАК ЗАПУСТИТЬ.md", "PLAYBOOK.md",
     "kplus", "run_server.sh",
     "Настроить.command", "Собрать приложение.command",
     "Спросить К+.command", "Отчёт об ошибке.command",

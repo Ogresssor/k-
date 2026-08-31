@@ -223,6 +223,35 @@ jobs:
           osascript -e 'quit app "KPlus"' 2>/dev/null || true
           pkill -f kplus-core 2>/dev/null || true
 
+      - name: Собрать папку, готовую к отправке
+        run: |
+          # Права на исполнение внутри .app обязаны уцелеть. Zip, которым
+          # upload-artifact пакует файлы, их теряет — приложение из него
+          # просто не запустится. Поэтому кладём .app в tar заранее, здесь,
+          # на маке: tar права хранит.
+          BUNDLE="src-tauri/target/release/bundle/macos"
+          PACK="$RUNNER_TEMP/pack/KPlusAgent"
+          mkdir -p "$PACK"
+          cp -R "$BUNDLE/KPlus.app" "$PACK/"
+          cp .env.example "$PACK/.env.example"
+          cp "КАК ЗАПУСТИТЬ.md" "$PACK/"
+
+          # Проверочного .env с ключом-пустышкой в отправляемой папке быть
+          # не должно.
+          rm -f "$PACK/.env"
+
+          tar -czf KPlusAgent-portable.tar.gz -C "$RUNNER_TEMP/pack" KPlusAgent
+          echo "размер: $(du -h KPlusAgent-portable.tar.gz | cut -f1)"
+
+          # Убеждаемся, что бит x доехал.
+          tar -tvzf KPlusAgent-portable.tar.gz             | grep "KPlus.app/Contents/MacOS/"             | head -5
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KPlusAgent-готовый
+          path: KPlusAgent-portable.tar.gz
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@v4
         with:
           name: KPlus-macos
