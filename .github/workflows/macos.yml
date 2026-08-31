@@ -132,6 +132,14 @@ jobs:
         run: |
           APP="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)"
           mkdir -p shots
+
+          # Ключ лежит в .env РЯДОМ с приложением, а не внутри него. Внутри —
+          # временная распаковка PyInstaller, которая живёт один запуск, и
+          # искать там нечего. Именно так папку получает пользователь.
+          ENV_FILE="$(dirname "$APP")/.env"
+          echo "KPLUS_PROVIDER=gemini" > "$ENV_FILE"
+          echo "GEMINI_API_KEY=ключ-для-проверки" >> "$ENV_FILE"
+
           open "$APP"
 
           # Оболочка выбирает порт при старте, поэтому узнаём его из командной
@@ -163,6 +171,15 @@ jobs:
             echo "браузер найден"
           else
             echo "браузер не найден — приложение не сможет открыть К+"
+            exit 1
+          fi
+
+          # Без ключа приложение выглядит исправным и ломается лишь на первом
+          # вопросе. Проверяем, что .env рядом с .app подхватился.
+          if grep -qE '"model_key": ?true' shots/health.json; then
+            echo "ключ модели подхвачен из .env рядом с приложением"
+          else
+            echo "приложение не нашло ключ в .env рядом с собой"
             exit 1
           fi
 

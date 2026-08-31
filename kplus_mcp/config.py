@@ -17,34 +17,18 @@ import sys
 from pathlib import Path
 
 
-def _load_env_file() -> None:
-    """Читаем .env рядом с проектом, чтобы ключи не приходилось экспортировать
-    вручную в каждом терминале. Уже заданные переменные окружения не трогаем —
-    они главнее файла."""
-    path = Path(os.environ.get("KPLUS_ENV_FILE", Path(__file__).parent.parent / ".env"))
-    if not path.is_file():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
-_load_env_file()
-
 def _portable_base() -> Path:
     """Папка, внутри которой живёт вся программа со всеми своими данными.
 
     Программа переносимая: она не устанавливается, ничего не пишет ни в
-    системные папки, ни в домашнюю папку пользователя. Всё — профиль
-    браузера, готовые документы, журнал — лежит рядом с ней. Папку можно
-    перенести куда угодно или удалить целиком, и следов не останется.
+    системные папки, ни в домашнюю папку пользователя. Всё — настройки,
+    профиль браузера, готовые документы, журнал — лежит рядом с ней. Папку
+    можно перенести куда угодно или удалить целиком, и следов не останется.
 
     Из собранного приложения путь считаем от самого .app, а не от файла
-    внутри него: данные должны лежать рядом с приложением, а не внутри,
-    иначе они пропадут при следующей сборке.
+    внутри него. Внутри — временная распаковка PyInstaller, которая живёт
+    ровно один запуск: искать там .env бессмысленно, ключ не найдётся, а
+    данные пропадут.
     """
     if getattr(sys, "frozen", False):
         exe = Path(sys.executable).resolve()
@@ -56,6 +40,28 @@ def _portable_base() -> Path:
 
 
 BASE_DIR = Path(os.environ.get("KPLUS_BASE_DIR", _portable_base()))
+
+
+def _load_env_file() -> None:
+    """Читаем .env рядом с программой, чтобы ключи не приходилось задавать
+    вручную. Уже заданные переменные окружения не трогаем — они главнее файла."""
+    path = Path(os.environ.get("KPLUS_ENV_FILE", BASE_DIR / ".env"))
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        # Пустая переменная окружения — это «не задано», а не «задано пустым».
+        # setdefault здесь не годится: «Настроить.command» экспортирует
+        # KPLUS_BROWSER_CHANNEL="" и этим затёр бы значение из .env.
+        if not os.environ.get(key, "").strip():
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
+_load_env_file()
 
 # Единственные места на диске, куда программа пишет, — и все они внутри
 # её собственной папки.

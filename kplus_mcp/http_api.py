@@ -24,7 +24,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from . import config, tools
-from .agent import run
+from .agent import LOCAL_PROVIDERS, PROVIDERS, run
 
 HOST = os.environ.get("KPLUS_HTTP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("KPLUS_HTTP_PORT", "8787"))
@@ -105,14 +105,34 @@ def _sse(kind: str, text: str) -> str:
                                  ensure_ascii=False) + chr(10) + chr(10)
 
 
+def _model_ready() -> tuple[str, bool]:
+    """Какой моделью думаем и есть ли к ней ключ.
+
+    Сам ключ наружу не отдаём никогда — только «есть/нет». Проверка нужна
+    потому, что без ключа приложение выглядит совершенно исправным и
+    ломается лишь на первом же вопросе.
+    """
+    name = (os.environ.get("KPLUS_PROVIDER") or "gemini").lower()
+    provider = PROVIDERS.get(name)
+    if provider is None:
+        return name, False
+    if name in LOCAL_PROVIDERS:
+        return name, True
+    return name, bool(os.environ.get(provider.key_env, "").strip())
+
+
 async def health(_: Request) -> JSONResponse:
     """Оболочка дёргает это, пока не ответит, — так она понимает, что готово."""
+    provider, has_key = _model_ready()
     return JSONResponse({
         "ok": True,
         "tools": [t.name for t in tools.TOOLS],
         "browser": config.browser_executable(),
         "browsers": config.installed_browsers(),
         "out_dir": str(config.OUT_DIR),
+        "base_dir": str(config.BASE_DIR),
+        "provider": provider,
+        "model_key": has_key,
     })
 
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import config
+
 SYSTEM_PROMPT = """Ты — помощник юриста с доступом к КонсультантПлюс через инструменты kplus_*.
 
 Железное правило: ты не цитируешь законы и судебные акты по памяти. Любая норма
@@ -50,7 +52,9 @@ def load() -> str:
     в конец. Так можно подстроить агента под свою специализацию, не трогая код.
     """
     text = SYSTEM_PROMPT
-    local = Path(os.environ.get("KPLUS_PROMPT_FILE", Path(__file__).parent.parent / "PROMPT_LOCAL.md"))
+    # Рядом с программой, а не рядом с модулем: в собранном приложении
+    # модуль лежит во временной распаковке.
+    local = Path(os.environ.get("KPLUS_PROMPT_FILE", config.BASE_DIR / "PROMPT_LOCAL.md"))
     if local.is_file():
         text += "\n\n--- Дополнительные указания пользователя ---\n" + local.read_text(encoding="utf-8")
     return text
