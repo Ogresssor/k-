@@ -89,13 +89,13 @@ ALLOWED_HOST_SUFFIXES = tuple(
 # Окно браузера видимое: К+ отсекает headless-трафик, да и логин удобнее руками.
 HEADLESS = os.environ.get("KPLUS_HEADLESS", "0") == "1"
 
-# Какой браузер использовать. Пусто — встроенный Chromium (его нужно скачать).
-# "chrome"/"msedge" — уже установленный Google Chrome или Edge; качать не надо.
-# Это выручает там, где сеть блокирует cdn.playwright.dev.
+# Предпочитаемый браузер: "chrome", "msedge" или "chromium". Пусто — ищем
+# сами среди установленных. Скачивать браузер программа не умеет вообще:
+# см. browser_executable() ниже.
 BROWSER_CHANNEL = os.environ.get("KPLUS_BROWSER_CHANNEL", "").strip()
 
 # Путь к исполняемому файлу любого браузера на движке Chromium (Arc, Yandex,
-# Comet и т.п.). Если задан — используется он, и качать ничего не нужно.
+# Comet и т.п.). Если задан — используется он.
 # Имеет приоритет над BROWSER_CHANNEL.
 BROWSER_EXECUTABLE = os.environ.get("KPLUS_BROWSER_PATH", "").strip()
 

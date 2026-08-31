@@ -104,9 +104,10 @@ def explain(exc: BaseException) -> str:
                 "Если так и должно быть, обратитесь к тому, кто выдал вам доступ.")
     if "net::ERR" in text:
         return "Страница К+ не открылась. Проверьте интернет и адрес доступа."
-    if "Executable doesn't exist" in text or "playwright install" in text:
-        return ("Не установлен браузер для работы с К+. "
-                "Запустите «Настроить.command» ещё раз.")
+    if "Не найден браузер" in text or "Executable doesn't exist" in text:
+        return ("На компьютере нет ни одного браузера на движке Chromium. "
+                "Поставьте Google Chrome обычным способом и запустите "
+                "программу снова — качать браузер она не умеет и не будет.")
     return "Произошла непредвиденная ошибка."
 
 
