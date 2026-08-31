@@ -260,13 +260,24 @@ jobs:
           NOTES="$NOTES Ключа внутри нет: положите свой .env рядом с KPlus.app"
           NOTES="$NOTES или воспользуйтесь tools/add_env.py."
 
+          # Пометка «предварительный» здесь недопустима: из адреса
+          # releases/latest GitHub предварительные релизы исключает, и
+          # постоянная ссылка отдаёт 404. Поэтому релиз обычный, и флаг
+          # снимается принудительно — на случай, если он уже проставлен.
           if gh release view latest > /dev/null 2>&1; then
             gh release upload latest KPlusAgent-portable.tar.gz --clobber
+            gh release edit latest --prerelease=false --latest --notes "$NOTES"
           else
-            gh release create latest KPlusAgent-portable.tar.gz               --title "Последняя сборка" --notes "$NOTES" --prerelease
+            gh release create latest KPlusAgent-portable.tar.gz               --title "Последняя сборка" --notes "$NOTES" --latest
           fi
-          echo "Скачивать здесь:"
-          echo "https://github.com/${{ github.repository }}/releases/latest/download/KPlusAgent-portable.tar.gz"
+          LINK="https://github.com/${{ github.repository }}/releases/latest/download/KPlusAgent-portable.tar.gz"
+          CODE="$(curl -sS -L -o /dev/null -w '%{http_code}' "$LINK" || echo 000)"
+          echo "Постоянная ссылка: $LINK"
+          echo "Ответ по ней: $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "Постоянная ссылка не работает — релиз опубликован неправильно."
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
