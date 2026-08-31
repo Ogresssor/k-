@@ -166,10 +166,32 @@ jobs:
             exit 1
           fi
 
+          # Главная проверка: доложило ли САМО ОКНО, что достучалось до
+          # агента. Ответа curl тут мало — прошлый прогон его получал, а
+          # окно в это время висело на «запускаю…», потому что WebKit резал
+          # его запрос как смешанное содержимое. Про такой сбой знает
+          # только окно, и оно сообщает о нём через команду ui_ready.
+          # Приложение, запущенное через open, может получить свой TMPDIR,
+          # отличный от шелловского — поэтому ищем в обоих местах.
+          STATE=""
+          for i in $(seq 1 40); do
+            for candidate in "$TMPDIR/kplus-ui-state.json" /tmp/kplus-ui-state.json; do
+              [ -f "$candidate" ] && STATE="$candidate" && break 2
+            done
+            sleep 1
+          done
+          if [ -z "$STATE" ]; then
+            echo "окно не доложило о запуске за 40 секунд — оно зависло"
+            exit 1
+          fi
+          cp "$STATE" shots/ui-state.json
+          echo "окно доложило:"; cat shots/ui-state.json; echo
+          grep -q '"ok":true' shots/ui-state.json || {
+            echo "окно не смогло связаться с агентом"; exit 1; }
+
           # Снимок ровно один: macOS 15 после первого вызова screencapture
           # показывает запрос на доступ к экрану, и все следующие снимки
           # состоят из этого диалога.
-          sleep 3
           screencapture -x shots/приложение.png
 
           {

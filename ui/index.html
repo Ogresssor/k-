@@ -33,6 +33,7 @@
   }
   header .title { font-weight: 600; }
   header .status { color: var(--dim); font-size: 13px; margin-left: auto; }
+  header .status.bad { color: var(--warn); }
   header button { -webkit-app-region: no-drag; }
 
   #log { flex: 1; overflow-y: auto; padding: 20px 16px; }
@@ -72,7 +73,7 @@
     background: var(--bg); border: 1px solid var(--line);
     border-radius: 10px; padding: 10px 12px; min-height: 44px; max-height: 180px;
   }
-  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
   button {
     font: inherit; border: 0; border-radius: 10px; padding: 0 16px;
     background: var(--accent); color: var(--accent-ink); cursor: pointer;
@@ -84,10 +85,11 @@
   button:disabled { opacity: .45; cursor: default; }
   .spin {
     display: inline-block; width: 11px; height: 11px; border-radius: 50%;
-    border: 2px solid var(--dim); border-top-color: transparent;
+    border: 2px solid currentColor; border-top-color: transparent;
     animation: spin .8s linear infinite; vertical-align: -1px; margin-right: 6px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
 </head>
 <body>
@@ -121,10 +123,21 @@ const hint = document.getElementById("hint");
 const input = document.getElementById("input");
 const send = document.getElementById("send");
 const statusEl = document.getElementById("status");
-let base = null, busy = false;
+
+let base = null;
+let busy = false;
+let ready = false;
 
 // В обычном браузере Tauri нет — тогда это предпросмотр интерфейса без агента.
 const tauri = window.__TAURI__ || null;
+
+// Запрос к агенту делает Rust, а не окно.
+//
+// Страница живёт по схеме tauri://localhost, которую WebKit считает
+// защищённой, а http://127.0.0.1 — нет. Обычный fetch из окна такой запрос
+// не выпускает вовсе, как смешанное содержимое, и приложение зависает на
+// «запускаю…». Плагин http уносит запрос в Rust, где этого ограничения нет.
+const httpFetch = (tauri && tauri.http && tauri.http.fetch) || window.fetch.bind(window);
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;" };
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ESCAPES[c]);
@@ -142,41 +155,71 @@ const bubble = (cls, text) => row(cls, '<div class="bubble">' + esc(text) + "</d
 
 function setBusy(on) {
   busy = on;
-  send.disabled = on || !ready();
-  input.disabled = on || !ready();
-  if (!on) input.focus();
+  send.disabled = on || !ready;
+  input.disabled = on || !ready;
+  if (!on && ready) input.focus();
 }
 
-let readyFlag = false;
-const ready = () => readyFlag;
+function fail(detail) {
+  statusEl.className = "status bad";
+  statusEl.textContent = "агент не запустился";
+  if (hint) hint.remove();
+  bubble("bot err",
+    "Не удалось связаться с агентом.\n\n" + detail +
+    "\n\nЗакройте приложение и откройте его заново. Если повторится — " +
+    "пришлите этот текст разработчику.");
+  report(false, detail);
+}
+
+// Докладываем в Rust, чем кончился запуск: иначе сбой выглядит как вечное
+// «запускаю…», и проверка в CI считает такой запуск успешным.
+function report(ok, detail) {
+  try {
+    if (tauri) tauri.core.invoke("ui_ready", { ok, detail: String(detail) });
+  } catch (e) {
+    // Доложить не вышло — это не повод ронять окно.
+  }
+}
 
 async function boot() {
   if (!tauri) {
     statusEl.textContent = "предпросмотр интерфейса — агент не подключён";
-    readyFlag = true;
+    ready = true;
     setBusy(false);
     return;
   }
-  const port = await tauri.core.invoke("api_port");
+
+  let port;
+  try {
+    port = await tauri.core.invoke("api_port");
+  } catch (e) {
+    fail("Оболочка не сообщила порт агента: " + e);
+    return;
+  }
   base = "http://127.0.0.1:" + port;
+
   // Сайдкар поднимается за секунду-две; стучимся, пока не ответит.
-  for (let i = 0; i < 120; i++) {
+  let last = "";
+  for (let i = 0; i < 60; i++) {
     try {
-      const r = await fetch(base + "/health");
+      const r = await httpFetch(base + "/health");
       if (r.ok) {
         const h = await r.json();
-        const name = (h.browser || "").split("/").pop() || "браузер не найден";
-        statusEl.textContent = "готов · " + name;
-        readyFlag = true;
+        const name = (h.browser || "").split("/").pop();
+        ready = true;
+        statusEl.className = "status";
+        statusEl.textContent = name ? "готов · " + name : "готов · браузер не найден";
         setBusy(false);
+        report(true, name || "браузер не найден");
         return;
       }
+      last = "агент ответил " + r.status;
     } catch (e) {
-      // сайдкар ещё поднимается
+      last = String(e);
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  statusEl.textContent = "агент не запустился";
+  fail("Агент на " + base + " не отвечает 30 секунд.\nПоследняя ошибка: " + last);
 }
 
 function render(target, ev) {
@@ -194,6 +237,17 @@ function render(target, ev) {
   log.scrollTop = log.scrollHeight;
 }
 
+// Одно событие SSE — строка «data: {...}», события разделены пустой строкой.
+function drain(chunk, target) {
+  const parts = chunk.split("\n\n");
+  const tail = parts.pop();
+  for (const part of parts) {
+    const line = part.trim();
+    if (line.startsWith("data:")) render(target, JSON.parse(line.slice(5)));
+  }
+  return tail;
+}
+
 async function ask(task) {
   if (hint) hint.remove();
   bubble("me", task);
@@ -209,25 +263,24 @@ async function ask(task) {
 
   const answer = row("bot", "");
   try {
-    const resp = await fetch(base + "/ask/stream", {
+    const resp = await httpFetch(base + "/ask/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ task })
     });
-    const reader = resp.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      buf += dec.decode(chunk.value, { stream: true });
-      const parts = buf.split("\n\n");
-      buf = parts.pop();
-      for (const part of parts) {
-        const line = part.trim();
-        if (!line.startsWith("data:")) continue;
-        render(answer, JSON.parse(line.slice(5)));
+
+    if (resp.body && resp.body.getReader) {
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buf = drain(buf + dec.decode(chunk.value, { stream: true }), answer);
       }
+    } else {
+      // Плагин может отдать ответ целиком, без потока: тогда разбираем разом.
+      drain(await resp.text(), answer);
     }
   } catch (e) {
     render(answer, { kind: "error", text: "Не получилось: " + e });
@@ -259,6 +312,12 @@ input.addEventListener("input", () => {
 document.getElementById("docs").onclick = () => {
   if (tauri) tauri.core.invoke("open_documents");
 };
+
+// Любая необработанная ошибка при запуске не должна оставлять окно
+// в бесконечном «запускаю…».
+window.addEventListener("unhandledrejection", (e) => {
+  if (!ready) fail("Ошибка при запуске: " + e.reason);
+});
 
 boot();
 </script>

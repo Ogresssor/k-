@@ -54,6 +54,19 @@ fn open_documents() {
     }
 }
 
+/// Окно докладывает, чем кончился его запуск.
+///
+/// Без этого сбой связки «окно → агент» выглядит как вечное «запускаю…»:
+/// приложение живо, сайдкар отвечает на curl, а окно молчит. Проверка в CI
+/// читает этот файл и падает, если окно так и не достучалось до агента.
+#[tauri::command]
+fn ui_ready(ok: bool, detail: String) {
+    let line = format!("{{\"ok\":{ok},\"detail\":{detail:?}}}");
+    println!("UI: {line}");
+    let path = std::env::temp_dir().join("kplus-ui-state.json");
+    let _ = std::fs::write(path, line);
+}
+
 /// Свободный порт у системы. Фиксированный брать нельзя: он может быть занят
 /// чем угодно, и тогда приложение молча не запустится.
 fn free_port() -> u16 {
@@ -69,9 +82,10 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
         .manage(Api { port })
         .manage(Sidecar(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![api_port, open_documents])
+        .invoke_handler(tauri::generate_handler![api_port, open_documents, ui_ready])
         .setup(move |app| {
             let command = app
                 .shell()
