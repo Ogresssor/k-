@@ -16,13 +16,22 @@ B=$'\033[1m'; DIM=$'\033[2m'; OK=$'\033[32m'; WARN=$'\033[33m'; N=$'\033[0m'
 HERE="$(pwd)"
 CLAUDE_CFG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 
+# Порт отладки нашего браузера. Берём из настроек, если они рядом, иначе
+# значение по умолчанию: обрывать чужие браузеры на соседних портах нельзя.
+CDP_PORT="$(sed -n 's/^KPLUS_CDP_PORT=//p' "$HERE/.env" 2>/dev/null | head -1)"
+CDP_PORT="${CDP_PORT:-9333}"
+
 # Места, где старые версии оставляли данные. Документы сюда не входят —
 # про них спрашиваем отдельно, это работа пользователя.
 LEFTOVERS=(
   "$HOME/.kplus-agent|данные и профиль браузера старых версий"
   "$HOME/Library/Logs/KPlusAgent|журнал старых версий"
-  "$HOME/Library/Caches/ms-playwright|Chromium, скачанный старой версией"
 )
+
+# Общий кеш Playwright. Наша старая версия качала туда Chromium, но папка
+# не наша: ею пользуется любая программа на Playwright. Поэтому она не в
+# списке выше и удаляется только по отдельному согласию.
+SHARED_CACHE="$HOME/Library/Caches/ms-playwright"
 DOCS="$HOME/Documents/KPlusAgent"
 
 size_of() {
@@ -81,6 +90,13 @@ if [ -f "$CLAUDE_CFG" ] && grep -q '"kplus"' "$CLAUDE_CFG" 2>/dev/null; then
   FOUND=1
 fi
 
+if size="$(size_of "$SHARED_CACHE")"; then
+  echo
+  printf "  %6s  %sобщий кеш Playwright%s (спрошу отдельно)
+" "$size" "$B" "$N"
+  echo "          $SHARED_CACHE"
+fi
+
 if size="$(size_of "$DOCS")"; then
   echo
   printf "  %6s  %sваши документы%s (спрошу отдельно)\n" "$size" "$B" "$N"
@@ -100,7 +116,7 @@ echo
 echo "${B}Работающие программы${N}"
 RUNNING=0
 pgrep -f "kplus-core|kplus-shell" > /dev/null 2>&1 && { echo "  К+ запущен"; RUNNING=1; }
-pgrep -f "remote-debugging-port=93" > /dev/null 2>&1 && { echo "  окно браузера К+ открыто"; RUNNING=1; }
+pgrep -f "remote-debugging-port=$CDP_PORT([^0-9]|\$)" > /dev/null 2>&1 && { echo "  окно браузера К+ открыто"; RUNNING=1; }
 pgrep -f "user-data-dir=.*kplus" > /dev/null 2>&1 && { echo "  браузер со старым профилем К+"; RUNNING=1; }
 [ "$RUNNING" = 0 ] && echo "  ${DIM}ничего не запущено${N}"
 
@@ -121,7 +137,7 @@ echo
 echo "${B}Закрываю программы${N}"
 kill_ours "kplus-core" "агент К+" || true
 kill_ours "kplus-shell" "окно К+" || true
-kill_ours "remote-debugging-port=93" "браузер К+" || true
+kill_ours "remote-debugging-port=$CDP_PORT([^0-9]|\$)" "браузер К+" || true
 kill_ours "user-data-dir=.*kplus" "браузер со старым профилем" || true
 echo "  ${OK}готово${N}"
 
@@ -161,7 +177,33 @@ PY
     echo "          $CLAUDE_CFG"
   fi
 fi
-rm -f "$HOME/Library/Application Support/Claude/claude_desktop_config.json.backup" 2>/dev/null || true
+# Копию конфига не трогаем молча: имя общее, её мог оставить не наш мастер.
+BACKUP="$CLAUDE_CFG.backup"
+if [ -f "$BACKUP" ]; then
+  echo
+  echo "  Рядом лежит копия настроек: $BACKUP"
+  if ask "  Удалить и её?"; then
+    rm -f "$BACKUP" && echo "  ${OK}удалено${N}"
+  else
+    echo "  оставлена"
+  fi
+fi
+
+# --- общий кеш Playwright -------------------------------------------------------
+
+if [ -d "$SHARED_CACHE" ]; then
+  echo
+  echo "${B}Общий кеш Playwright${N}"
+  echo "  $SHARED_CACHE ($(size_of "$SHARED_CACHE"))"
+  echo "${DIM}  Туда старая версия К+ качала свой Chromium. Папка общая: если"
+  echo "  на этом компьютере есть другие программы на Playwright, они"
+  echo "  пользуются ей же. Не уверены — оставьте, места она просит немного.${N}"
+  if ask "  Удалить общий кеш?"; then
+    rm -rf "$SHARED_CACHE" && echo "  ${OK}удалено${N}"
+  else
+    echo "  оставлен"
+  fi
+fi
 
 # --- документы ------------------------------------------------------------------
 

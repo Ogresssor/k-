@@ -26,7 +26,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def repack(source: Path, env: Path, out: Path) -> Path:
+def _mode_for(path: Path) -> int:
+    return 0o755 if path.suffix == ".command" else 0o644
+
+
+def repack(source: Path, env: Path, out: Path, extra: list[Path] | None = None) -> Path:
     if not source.is_file():
         raise SystemExit(f"Не нашёл архив: {source}")
     if not env.is_file():
@@ -43,9 +47,10 @@ def repack(source: Path, env: Path, out: Path) -> Path:
 
         with tarfile.open(out, "w:gz", format=tarfile.GNU_FORMAT, encoding="utf-8") as dst:
             executables = 0
+            replaced = {f"{folder}/.env"} | {f"{folder}/{i.name}" for i in extra or []}
             for m in members:
-                if m.name == f"{folder}/.env":
-                    continue  # свой .env положим сами, ниже
+                if m.name in replaced:
+                    continue  # эти файлы кладём сами, ниже
                 if m.mode & 0o111 and m.isfile():
                     executables += 1
                 dst.addfile(m, src.extractfile(m) if m.isfile() else None)
@@ -55,6 +60,17 @@ def repack(source: Path, env: Path, out: Path) -> Path:
             info.mode = 0o600          # ключ читает только владелец
             info.mtime = int(time.time())
             dst.addfile(info, io.BytesIO(env_data))
+
+            # Текстовые файлы рядом с приложением — скрипт удаления,
+            # инструкция — можно обновить без пересборки .app: они не
+            # компилируются и ни от чего не зависят.
+            for item in extra or []:
+                data = item.read_bytes().replace(b"\r\n", b"\n")
+                add = tarfile.TarInfo(f"{folder}/{item.name}")
+                add.size = len(data)
+                add.mode = _mode_for(item)
+                add.mtime = int(time.time())
+                dst.addfile(add, io.BytesIO(data))
 
     with tarfile.open(out) as check:
         names = check.getnames()
@@ -86,8 +102,11 @@ if __name__ == "__main__":
     ap.add_argument("source", help="KPlusAgent-portable.tar.gz, скачанный с CI")
     ap.add_argument("--env", default=str(ROOT / ".env"), help="файл с ключом")
     ap.add_argument("-o", "--out", default=str(ROOT / "dist" / "KPlusAgent-mac.tar.gz"))
+    ap.add_argument("--with", dest="extra", nargs="*", default=[],
+                    help="добавить или заменить файлы рядом с приложением")
     args = ap.parse_args()
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    repack(Path(args.source), Path(args.env), out)
+    repack(Path(args.source), Path(args.env), out,
+           [Path(f) for f in args.extra])
