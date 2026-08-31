@@ -128,31 +128,56 @@ jobs:
           kill $CORE_PID 2>/dev/null || true
           test -s /tmp/health.json || { echo "сайдкар не ответил"; exit 1; }
 
-      - name: Запустить приложение и снять экран
+      - name: Запустить приложение и проверить связку окна с агентом
         run: |
           APP="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)"
           mkdir -p shots
-
-          # Раннер macOS даёт настоящую графическую сессию, поэтому окно
-          # действительно открывается и его видно на снимке. Это единственный
-          # способ посмотреть на приложение живьём, не имея мака.
           open "$APP"
 
-          for i in $(seq 1 12); do
-            sleep 2
-            screencapture -x "shots/окно-$i.png"
-            if pgrep -f kplus-core > /dev/null; then
-              echo "сайдкар поднялся на $((i * 2)) секунде"
-            fi
+          # Оболочка выбирает порт при старте, поэтому узнаём его из командной
+          # строки уже запущенного сайдкара.
+          PORT=""
+          for i in $(seq 1 30); do
+            sleep 1
+            PORT="$(pgrep -lf 'kplus-core --port' | head -1 | awk '{for (i = 1; i <= NF; i++) if ($i == "--port") print $(i + 1)}')"
+            [ -n "$PORT" ] && break
           done
+          test -n "$PORT" || { echo "сайдкар не запустился из приложения"; exit 1; }
+          echo "сайдкар слушает порт $PORT"
 
-          # Что именно крутится в системе на момент снимка.
+          # Тот же запрос, что делает окно при старте. Если он проходит —
+          # связка «окно → агент» рабочая, и надпись «агент не подключён»
+          # в интерфейсе появиться не может.
+          for i in $(seq 1 30); do
+            if curl -fsS --noproxy '*' "http://127.0.0.1:$PORT/health" > shots/health.json; then
+              break
+            fi
+            sleep 1
+          done
+          test -s shots/health.json || { echo "агент не ответил окну"; exit 1; }
+          echo "агент ответил:"; cat shots/health.json
+
+          # Браузер приложение должно найти само, ничего не скачивая.
+          # Starlette отдаёт JSON без пробелов, отсюда такой шаблон.
+          if grep -qE '"browser": ?"/' shots/health.json; then
+            echo "браузер найден"
+          else
+            echo "браузер не найден — приложение не сможет открыть К+"
+            exit 1
+          fi
+
+          # Снимок ровно один: macOS 15 после первого вызова screencapture
+          # показывает запрос на доступ к экрану, и все следующие снимки
+          # состоят из этого диалога.
+          sleep 3
+          screencapture -x shots/приложение.png
+
           {
-            echo "=== процессы приложения ==="
-            pgrep -lf "KPlus|kplus-core" || echo "ничего не запущено"
+            echo "=== процессы ==="
+            pgrep -lf "KPlus|kplus-core" || echo "ничего"
             echo
-            echo "=== окна на экране ==="
-            osascript -e 'tell application "System Events" to get name of every process whose visible is true'               || echo "список окон недоступен"
+            echo "=== окна ==="
+            osascript -e 'tell application "System Events" to get name of every process whose visible is true' || true
           } > shots/состояние.txt 2>&1
           cat shots/состояние.txt
 
