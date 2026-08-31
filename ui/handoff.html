@@ -1,0 +1,306 @@
+<title>К+ на маке</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #eef0f3;
+    --card: #f9fafb;
+    --ink: #191c21;
+    --dim: #5b636e;
+    --line: #d5dae0;
+    --accent: #0b5cd5;
+    --accent-soft: #e4ecfb;
+    --warn: #a8320c;
+    --warn-soft: #fbeae4;
+    --mono-bg: #1c2027;
+    --mono-ink: #e6e9ee;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171b;
+      --card: #1c2027;
+      --ink: #e9ecf1;
+      --dim: #9aa3af;
+      --line: #2b313a;
+      --accent: #5f9aff;
+      --accent-soft: #1a2740;
+      --warn: #ff8b6b;
+      --warn-soft: #33201a;
+      --mono-bg: #0f1216;
+      --mono-ink: #e6e9ee;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14171b;
+    --card: #1c2027;
+    --ink: #e9ecf1;
+    --dim: #9aa3af;
+    --line: #2b313a;
+    --accent: #5f9aff;
+    --accent-soft: #1a2740;
+    --warn: #ff8b6b;
+    --warn-soft: #33201a;
+    --mono-bg: #0f1216;
+    --mono-ink: #e6e9ee;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    padding: 44px 20px 80px;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+
+  .eyebrow {
+    margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--dim);
+  }
+  h1 {
+    margin: 8px 0 0; font-size: clamp(28px, 5vw, 40px); font-weight: 600;
+    letter-spacing: -.022em; text-wrap: balance;
+  }
+  .lede { margin: 12px 0 0; color: var(--dim); max-width: 62ch; }
+
+  h2 {
+    margin: 0 0 4px; font-size: 21px; font-weight: 600; letter-spacing: -.012em;
+  }
+  h2 .who {
+    display: block; font-size: 12px; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  section > p:first-of-type { margin-top: 0; color: var(--dim); }
+
+  /* Шаги — настоящая последовательность, порядок несёт смысл. */
+  ol.steps { list-style: none; margin: 24px 0 0; padding: 0; counter-reset: step; }
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 26px 46px;
+    border-left: 2px solid var(--line);
+    margin-left: 13px;
+  }
+  ol.steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute; left: -14px; top: -2px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 600;
+    display: grid; place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  ol.steps h3 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+  ol.steps p { margin: 0 0 8px; }
+  ol.steps p:last-child { margin-bottom: 0; }
+
+  pre {
+    background: var(--mono-bg); color: var(--mono-ink);
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    font-size: 13.5px; line-height: 1.65;
+    padding: 13px 15px; border-radius: 8px;
+    overflow-x: auto; margin: 10px 0;
+    cursor: pointer; position: relative;
+  }
+  pre::after {
+    content: "нажмите, чтобы выделить";
+    position: absolute; top: 8px; right: 12px;
+    font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: #7d8899; pointer-events: none;
+  }
+  pre.picked::after { content: "выделено"; color: #6fb98a; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .89em;
+    background: var(--accent-soft); color: var(--ink);
+    padding: 1px 6px; border-radius: 4px;
+  }
+
+  .note {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .note.warn { background: var(--warn-soft); border-color: var(--warn); }
+  .note h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+  .note.warn h3 { color: var(--warn); }
+  .note p { margin: 0 0 8px; font-size: 15px; }
+  .note p:last-child { margin-bottom: 0; }
+  .note ul { margin: 8px 0 0; padding-left: 20px; font-size: 15px; }
+  .note li { margin-bottom: 7px; }
+  .note li:last-child { margin-bottom: 0; }
+
+  hr {
+    border: 0; border-top: 1px solid var(--line); margin: 0;
+  }
+
+  .ask { display: grid; gap: 12px; }
+  .ask > div {
+    background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 12px 15px; font-size: 15px;
+  }
+  .ask strong { font-weight: 600; }
+
+  a { color: var(--accent); }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Передача программы</p>
+    <h1>К+ на маке</h1>
+    <p class="lede">
+      Юридический помощник с доступом к КонсультантПлюс. Слева — что делаете
+      вы, ниже — что делает человек с маком. Установки нет: программа живёт
+      в одной папке и удаляется вместе с ней.
+    </p>
+  </header>
+
+  <hr>
+
+  <section>
+    <h2><span class="who">Ваша часть</span>Собрать файл для отправки</h2>
+    <p>Три шага, все на вашем компьютере.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Скачать свежую сборку</h3>
+        <p>Постоянный адрес, не меняется:</p>
+        <pre>https://github.com/Ogresssor/k-/releases/latest</pre>
+        <p>Нужен файл <code>KPlusAgent-portable.tar.gz</code>. Ключа внутри
+        нет — сборка идёт на чужой машине, туда ваш ключ не попадает.</p>
+      </li>
+      <li>
+        <h3>Вложить свой ключ</h3>
+        <p>В папке проекта:</p>
+        <pre>python tools/add_env.py путь\к\KPlusAgent-portable.tar.gz</pre>
+        <p>Получится <code>dist/KPlusAgent-mac.tar.gz</code> — с ключом внутри
+        и с сохранёнными правами на запуск. Просто распаковать и переупаковать
+        вручную нельзя: права потеряются, и приложение не запустится.</p>
+      </li>
+      <li>
+        <h3>Отправить</h3>
+        <p>Один файл: <code>KPlusAgent-mac.tar.gz</code>, около 59 МБ.
+        Вместе с ним — ссылку на эту страницу.</p>
+      </li>
+    </ol>
+  </section>
+
+  <div class="note warn">
+    <h3>Внутри файла ваш ключ Gemini</h3>
+    <p>Кто получит архив — получит и ключ. Отправляйте только тому, кому
+    доверяете; при необходимости ключ отзывается в консоли Google.</p>
+  </div>
+
+  <hr>
+
+  <section>
+    <h2><span class="who">Часть получателя</span>Запустить на маке</h2>
+    <p>Две команды один раз, дальше — обычная программа.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Распаковать через Терминал</h3>
+        <p>Не двойным щелчком по архиву: Finder помечает распакованные файлы
+        карантином, и программа молча не откроется.</p>
+        <p>Терминал открывается так: Cmd+Space, набрать «Терминал», Enter.
+        Дальше вставить строку и нажать Enter:</p>
+        <pre>tar -xzf ~/Downloads/KPlusAgent-mac.tar.gz -C ~/Desktop</pre>
+        <p>Папка <code>KPlusAgent</code> появится на Рабочем столе.</p>
+      </li>
+      <li>
+        <h3>Снять карантин</h3>
+        <p>Программа не подписана у Apple, поэтому macOS сначала откажется её
+        открывать. Следующая строка это снимает:</p>
+        <pre>xattr -dr com.apple.quarantine ~/Desktop/KPlusAgent</pre>
+        <p>Ответа не будет — так и надо. Терминал больше не понадобится.</p>
+      </li>
+      <li>
+        <h3>Открыть KPlus.app</h3>
+        <p>Двойной щелчок по приложению в папке. В правом верхнем углу окна
+        должно появиться <strong>«готов»</strong> и название браузера.</p>
+        <p>Дальше можно писать обычными словами: «Напиши претензию в страховую:
+        не выплатили по ОСАГО после ДТП 12.03.2026, отказ от 05.04.2026».</p>
+      </li>
+      <li>
+        <h3>Войти в КонсультантПлюс</h3>
+        <p>При первом вопросе откроется окно браузера. Логин и пароль вводятся
+        руками — программа их не сохраняет и никуда не передаёт, она лишь
+        запоминает, что вход уже сделан.</p>
+        <p>Готовые документы появляются в папке «Документы» рядом с
+        приложением, в двух видах: <code>.docx</code> для Word и
+        <code>.md</code> для быстрого просмотра.</p>
+      </li>
+    </ol>
+  </section>
+
+  <div class="note warn">
+    <h3>Только одно окно К+</h3>
+    <p>КонсультантПлюс разрешает один сеанс на пользователя и следит, чтобы
+    с разных устройств не работали одновременно. Два браузера на одном
+    компьютере он тоже считает за двух пользователей.</p>
+    <ul>
+      <li>Не открывайте К+ в своём обычном браузере, пока работает программа:
+      у неё отдельный профиль, и для К+ это второй вход.</li>
+      <li>Программа всегда работает в одном окне и одной вкладке. Второй
+      запуск честно скажет, что сеанс занят, а не откроет второе окно.</li>
+      <li>Закончили — нажмите <strong>«Завершить сеанс К+»</strong> в шапке
+      окна. Кнопка видна, пока окно К+ открыто.</li>
+    </ul>
+    <p>Окно К+ намеренно остаётся открытым между вопросами, чтобы не входить
+    заново каждый раз. Но пока оно открыто, сеанс занят.</p>
+  </div>
+
+  <div class="note">
+    <h3>Что нужно на маке</h3>
+    <p>Любой установленный браузер на движке Chromium: Chrome, Edge, Brave,
+    Vivaldi, Yandex, Arc, Comet. Программа найдёт его сама и <strong>ничего
+    скачивать не будет</strong>. Если нет ни одного — поставьте Google Chrome
+    обычным способом.</p>
+    <p>Никакого Python, никакой установки, ничего в «Программы» не копируется.
+    Папку можно перенести куда угодно — программа поедет со всеми данными.
+    Удалить — просто удалить папку.</p>
+  </div>
+
+  <hr>
+
+  <section>
+    <h2><span class="who">Обратная связь</span>Что прислать после проверки</h2>
+    <p>Три вещи, которых не видно со стороны.</p>
+
+    <div class="ask">
+      <div><strong>Снимок окна</strong> после запуска — важно, что написано
+      в правом верхнем углу: «готов» и название браузера.</div>
+
+      <div><strong>Закрылось ли окно браузера само</strong> через несколько
+      секунд после того, как ответ готов. Не должно — это главное, что
+      чинилось.</div>
+
+      <div><strong>Текст ошибки</strong>, если что-то пошло не так. Он теперь
+      пишется в самом окне по-человечески, снимка достаточно.</div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Команды удобнее выделять одним нажатием, чем тащить курсором.
+  for (const block of document.querySelectorAll("pre")) {
+    block.addEventListener("click", () => {
+      const range = document.createRange();
+      range.selectNodeContents(block);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      block.classList.add("picked");
+      setTimeout(() => block.classList.remove("picked"), 2000);
+    });
+  }
+</script>

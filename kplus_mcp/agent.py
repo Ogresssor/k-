@@ -12,6 +12,7 @@ OpenAI-совместимые провайдеры и локальные мод�
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -135,6 +136,85 @@ def _parse_text_action(content: str) -> tuple[str, dict] | None:
     return m.group("name"), args
 
 
+class _Route:
+    """Путь до модели с запасным вариантом.
+
+    Держит по клиенту на каждый путь, ходит первым рабочим и запоминает
+    его на остаток задачи. Если запомненный путь отвалился посреди работы,
+    следующий запрос снова переберёт варианты.
+    """
+
+    def __init__(self, clients: list[tuple[str, httpx.AsyncClient]],
+                 emit: Callable[[str, str], None]) -> None:
+        self._clients = clients
+        self._emit = emit
+        self._chosen: int | None = None
+
+    @property
+    def label(self) -> str:
+        return self._clients[self._chosen][0] if self._chosen is not None else "не выбран"
+
+    async def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        start = self._chosen or 0
+        order = [start] + [i for i in range(len(self._clients)) if i != start]
+        first_error: Exception | None = None
+
+        for i in order:
+            label, client = self._clients[i]
+            try:
+                response = await client.post(url, **kwargs)
+            except httpx.HTTPError as exc:
+                if first_error is None:
+                    first_error = exc
+                if self._chosen == i:
+                    self._chosen = None
+                log_event(f"Путь «{label}» не сработал: {type(exc).__name__}")
+                continue
+
+            if self._chosen != i:
+                self._chosen = i
+                log_event(f"Модель отвечает {label}")
+                if i > 0:
+                    self._emit("tool", f"связь с моделью восстановлена — {label}")
+            return response
+
+        raise first_error if first_error else RuntimeError("нет путей до модели")
+
+
+def _explain_network(exc: Exception, prov: Provider, proxy: str | None) -> str:
+    """Назвать причину, а не посоветовать «проверьте интернет».
+
+    Сетевых причин у неудачного запроса к модели ровно три, и лечатся они
+    по-разному: недоступен прокси, недоступен сам сервис, либо всё слишком
+    медленно. Общая фраза не даёт понять, какая именно, — и тогда сбой
+    невозможно починить, не читая журнал.
+    """
+    from urllib.parse import urlparse
+
+    host = urlparse(prov.base_url).hostname or prov.base_url
+    detail = str(exc).strip() or type(exc).__name__
+
+    if isinstance(exc, (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout)):
+        return (f"Модель на {host} не ответила вовремя. Попробуйте ещё раз."
+                f"\n\nТехническая причина: {detail}")
+
+    # Сюда попадаем, только если не сработал ни один путь: прокси уже
+    # пробовался вместе с прямым соединением, и наоборот.
+    if proxy:
+        where = urlparse(proxy).hostname or proxy
+        return (f"Не удалось связаться с моделью на {host} — ни через прокси "
+                f"{where}, ни напрямую.\n\n"
+                "Если у вас включён VPN, попробуйте его выключить: он может "
+                "перехватывать соединение с прокси. Строка KPLUS_MODEL_PROXY "
+                "в файле .env рядом с программой задаёт прокси, её можно "
+                f"убрать или заменить своей.\n\nТехническая причина: {detail}")
+
+    return (f"Не удалось соединиться с {host}.\n\n"
+            "Похоже, сервис закрыт для вашей страны или сети. Нужен прокси "
+            "или VPN: прокси задаётся строкой KPLUS_MODEL_PROXY в файле .env "
+            f"рядом с программой.\n\nТехническая причина: {detail}")
+
+
 async def run(task: str, provider: str | None = None, model: str | None = None,
               on_event: Callable[[str, str], None] | None = None) -> str:
     """Отработать задачу до конца и вернуть финальный ответ модели.
@@ -160,18 +240,29 @@ async def run(task: str, provider: str | None = None, model: str | None = None,
     # Прокси только для модели: браузер (К+) им не пользуется. Когда прокси задан,
     # системные переменные окружения игнорируем — используем ровно его.
     proxy = config.MODEL_PROXY or None
-    client_kwargs: dict[str, Any] = {"timeout": 180}
+
+    # Сеть у каждого своя. У одного сервис закрыт по региону и прокси
+    # обязателен; у другого тот же прокси недоступен, зато сервис открыт
+    # напрямую; у третьего включён VPN, и прокси только мешает. Требовать
+    # от пользователя правки .env под каждый случай — плохо, поэтому
+    # готовим оба пути и выбираем рабочий сами.
+    routes: list[tuple[str, dict[str, Any]]] = []
     if proxy:
-        client_kwargs["proxy"] = proxy
-        client_kwargs["trust_env"] = False
+        routes.append(("через прокси", {"timeout": 180, "proxy": proxy, "trust_env": False}))
+        routes.append(("напрямую", {"timeout": 180, "trust_env": False}))
     else:
-        client_kwargs["trust_env"] = not local
+        routes.append(("напрямую", {"timeout": 180, "trust_env": not local}))
 
     started = time.monotonic()
     pace.start_task()
     log_event(f"Запрос ({prov.mode}, {model_name}, proxy={'да' if proxy else 'нет'}): {task[:200]}")
 
-    async with httpx.AsyncClient(**client_kwargs) as http:
+    async with contextlib.AsyncExitStack() as stack:
+        http = _Route(
+            [(label, await stack.enter_async_context(httpx.AsyncClient(**kw)))
+             for label, kw in routes],
+            emit,
+        )
         for step in range(MAX_STEPS):
             # Предохранитель от зацикливания: агент не может молотить часами,
             # выжигая заряд, процессор и лимит запросов.
@@ -193,8 +284,7 @@ async def run(task: str, provider: str | None = None, model: str | None = None,
                 )
             except httpx.HTTPError as e:
                 log_exception("обращение к модели", e)
-                return ("Не удалось связаться с моделью. Проверьте интернет "
-                        "и попробуйте ещё раз.")
+                return _explain_network(e, prov, proxy)
 
             if r.status_code >= 400:
                 log_event(f"Модель вернула {r.status_code}: {r.text[:400]}", logging.ERROR)
