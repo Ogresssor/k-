@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Запуск агента из терминала: ./kplus "напиши претензию..."
+cd "$(dirname "$0")"
+exec ./.venv/bin/python -m kplus_mcp.cli "$@"

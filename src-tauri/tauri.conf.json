@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "KPlus",
+  "version": "1.0.0",
+  "identifier": "ru.kplus.agent",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "К+ — юридический помощник",
+        "width": 900,
+        "height": 680,
+        "minWidth": 620,
+        "minHeight": 460,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": ["icons/icon.icns"],
+    "externalBin": ["binaries/kplus-core"],
+    "resources": [],
+    "copyright": "K+ Agent",
+    "category": "Productivity",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

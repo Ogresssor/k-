@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.venv/
+browser-profile/
+out/
+.env
+
+# сборка
+build/
+dist/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+src-tauri/icons/*.icns
+src-tauri/icons/*.ico
+src-tauri/icons/[0-9]*.png
+src-tauri/icons/icon.png
+src-tauri/icons/Square*.png
+src-tauri/icons/StoreLogo.png
+
+# данные переносимой программы (лежат рядом с ней)
+Данные/
+Документы/
+Отчёт*.txt
+*.app/
+.python/

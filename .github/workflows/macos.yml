@@ -1,0 +1,175 @@
+# Настоящая проверка на настоящем маке. Своего мака не нужно: GitHub даёт
+# macOS-раннеры на Apple Silicon, и Google Chrome на них уже установлен.
+#
+# Прогон повторяет путь пользователя целиком: собрать архив -> распаковать
+# через tar -> запустить «Настроить.command» -> убедиться, что окно браузера
+# переживает выход агента.
+name: macOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Установка и проверка на macOS
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать архив
+        run: python3 tools/build_archive.py -o /tmp/KPlusAgent-mac.tar.gz
+
+      - name: Распаковать так же, как это делает пользователь
+        run: |
+          mkdir -p "$HOME/Applications"
+          tar -xzf /tmp/KPlusAgent-mac.tar.gz -C "$HOME/Applications"
+
+      - name: Права на исполнение уцелели в архиве
+        run: |
+          cd "$HOME/Applications/KPlusAgent"
+          for f in "Настроить.command" "Спросить К+.command" \
+                   "Отчёт об ошибке.command" kplus run_server.sh; do
+            test -x "$f" || { echo "не исполняемый: $f"; exit 1; }
+            echo "исполняемый: $f"
+          done
+
+      - name: Карантина нет
+        run: |
+          cd "$HOME/Applications/KPlusAgent"
+          if xattr -lr . | grep -q quarantine; then
+            echo "распаковка проставила карантин"; exit 1
+          fi
+          echo "карантина нет"
+
+      - name: Chrome на месте
+        run: |
+          ls -d "/Applications/Google Chrome.app"
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version
+
+      - name: Запустить «Настроить.command»
+        env:
+          KPLUS_UNATTENDED: "1"
+        run: |
+          cd "$HOME/Applications/KPlusAgent"
+          cp .env.example .env
+          ./Настроить.command
+          test -x .venv/bin/python || { echo "окружение не создано"; exit 1; }
+
+      - name: Главное — браузер переживает выход агента
+        env:
+          KPLUS_HEADLESS: "1"
+        run: |
+          cd "$HOME/Applications/KPlusAgent"
+          ./.venv/bin/python tests/selfcheck.py
+
+      - name: Журнал при провале
+        if: failure()
+        run: |
+          cat "$HOME/Library/Logs/KPlusAgent/"*.log 2>/dev/null || true
+          cat "$TMPDIR/kplus-selfcheck/logs/"*.log 2>/dev/null || true
+
+  app:
+    name: Сборка приложения (.app и .dmg)
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Rust
+        run: rustc -vV
+
+      - name: Собрать сайдкар (весь Python в одном файле)
+        run: bash tools/build_sidecar.sh
+
+      - name: Иконки приложения
+        run: |
+          npm install -g @tauri-apps/cli@^2
+          tauri icon src-tauri/icons/source.png
+
+      - name: Собрать .app и .dmg
+        run: tauri build --bundles app,dmg
+
+      - name: Что получилось
+        run: |
+          cd src-tauri/target/release/bundle
+          find . -maxdepth 2 -name "*.app" -o -maxdepth 2 -name "*.dmg" | while read -r f; do
+            echo "$(du -sh "$f" | cut -f1)  $f"
+          done
+
+      - name: Приложение запускается и поднимает сайдкар
+        run: |
+          APP="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)"
+          test -n "$APP" || { echo "приложение не собралось"; exit 1; }
+          CORE="$APP/Contents/MacOS/kplus-core"
+          test -x "$CORE" || { echo "сайдкар не попал внутрь .app"; exit 1; }
+          echo "сайдкар на месте: $(du -sh "$CORE" | cut -f1)"
+          # Поднимаем сайдкар напрямую и проверяем, что он отвечает.
+          "$CORE" --port 8791 &
+          CORE_PID=$!
+          for i in $(seq 1 60); do
+            if curl -fsS --noproxy '*' http://127.0.0.1:8791/health > /tmp/health.json; then
+              echo "сайдкар ответил:"; cat /tmp/health.json; break
+            fi
+            sleep 1
+          done
+          kill $CORE_PID 2>/dev/null || true
+          test -s /tmp/health.json || { echo "сайдкар не ответил"; exit 1; }
+
+      - name: Запустить приложение и снять экран
+        run: |
+          APP="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)"
+          mkdir -p shots
+
+          # Раннер macOS даёт настоящую графическую сессию, поэтому окно
+          # действительно открывается и его видно на снимке. Это единственный
+          # способ посмотреть на приложение живьём, не имея мака.
+          open "$APP"
+
+          for i in $(seq 1 12); do
+            sleep 2
+            screencapture -x "shots/окно-$i.png"
+            if pgrep -f kplus-core > /dev/null; then
+              echo "сайдкар поднялся на $((i * 2)) секунде"
+            fi
+          done
+
+          # Что именно крутится в системе на момент снимка.
+          {
+            echo "=== процессы приложения ==="
+            pgrep -lf "KPlus|kplus-core" || echo "ничего не запущено"
+            echo
+            echo "=== окна на экране ==="
+            osascript -e 'tell application "System Events" to get name of every process whose visible is true'               || echo "список окон недоступен"
+          } > shots/состояние.txt 2>&1
+          cat shots/состояние.txt
+
+          osascript -e 'quit app "KPlus"' 2>/dev/null || true
+          pkill -f kplus-core 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KPlus-macos
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Снимки-экрана
+          path: shots/
+          if-no-files-found: warn
