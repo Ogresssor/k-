@@ -124,7 +124,7 @@ def report_crash(exc: BaseException, where: str = "работа программ
 
 def build_report() -> Path:
     """Собрать один текстовый файл, который пользователь пришлёт разработчику."""
-    from . import config
+    from . import _build, config
 
     root = Path(__file__).resolve().parent.parent
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
@@ -139,6 +139,7 @@ def build_report() -> Path:
         "Ключи доступа и пароли из отчёта удалены.",
         "",
         "── Система ──",
+        f"Сборка: {_build.VERSION}",
         f"macOS/ОС: {platform.platform()}",
         f"Процессор: {platform.machine()}",
         f"Python: {sys.version.split()[0]}",

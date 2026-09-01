@@ -16,6 +16,15 @@ PY="${KPLUS_PYTHON:-python3}"
 "$PY" -m pip install --quiet --upgrade pip
 "$PY" -m pip install --quiet -r requirements.txt pyinstaller
 
+# Отметка сборки: по ней видно, что именно запущено у пользователя.
+STAMP="$(git rev-parse --short HEAD 2>/dev/null || echo неизвестно)"
+git diff --quiet 2>/dev/null || STAMP="$STAMP+правки"
+STAMP="$STAMP от $(date +%Y-%m-%d)"
+printf '"""Отметка сборки, вписана при упаковке."""
+VERSION = "%s"
+' "$STAMP" \n  > kplus_mcp/_build.py
+echo "  отметка сборки: $STAMP"
+
 rm -rf build "$OUT"
 mkdir -p "$OUT"
 

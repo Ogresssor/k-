@@ -39,7 +39,41 @@ def _portable_base() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+# Папка, где лежит программа. Отсюда читаются .env и PROMPT_LOCAL.md —
+# даже если писать сюда нельзя.
 BASE_DIR = Path(os.environ.get("KPLUS_BASE_DIR", _portable_base()))
+
+
+def _writable(folder: Path) -> bool:
+    """Можно ли вообще писать в эту папку."""
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        probe = folder / ".probe"
+        probe.write_bytes(b"")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def _data_root() -> Path:
+    """Куда складывать профиль браузера, документы и журнал.
+
+    Обычно — рядом с программой: она переносимая и в чужие папки не лезет.
+    Но пользователь вправе перетащить приложение в «Программы», а туда без
+    администратора не записать. Раньше это выглядело как «браузер не
+    открывается»: программа падала на создании профиля, не дойдя до
+    запуска. Поэтому если рядом писать нельзя — уходим в стандартное для
+    macOS место и говорим об этом в журнале.
+    """
+    if _writable(BASE_DIR):
+        return BASE_DIR
+    fallback = Path.home() / "Library" / "Application Support" / "KPlusAgent"
+    return fallback
+
+
+DATA_ROOT = Path(os.environ.get("KPLUS_DATA_ROOT", _data_root()))
+PORTABLE = DATA_ROOT == BASE_DIR
 
 
 def _load_env_file() -> None:
@@ -65,9 +99,9 @@ _load_env_file()
 
 # Единственные места на диске, куда программа пишет, — и все они внутри
 # её собственной папки.
-DATA_DIR = Path(os.environ.get("KPLUS_DATA_DIR", BASE_DIR / "Данные"))
+DATA_DIR = Path(os.environ.get("KPLUS_DATA_DIR", DATA_ROOT / "Данные"))
 PROFILE_DIR = DATA_DIR / "browser-profile"
-OUT_DIR = Path(os.environ.get("KPLUS_OUT_DIR", BASE_DIR / "Документы"))
+OUT_DIR = Path(os.environ.get("KPLUS_OUT_DIR", DATA_ROOT / "Документы"))
 LOG_DIR = Path(os.environ.get("KPLUS_LOG_DIR", DATA_DIR / "Журнал"))
 
 # Стартовая страница вашего доступа к К+.

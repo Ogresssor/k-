@@ -24,6 +24,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from . import browser, config, tools
+from ._build import VERSION
 from .agent import LOCAL_PROVIDERS, PROVIDERS, run
 
 HOST = os.environ.get("KPLUS_HTTP_HOST", "127.0.0.1")
@@ -142,11 +143,14 @@ async def health(_: Request) -> JSONResponse:
         "browsers": config.installed_browsers(),
         "out_dir": str(config.OUT_DIR),
         "base_dir": str(config.BASE_DIR),
+        "data_root": str(config.DATA_ROOT),
+        "portable": config.PORTABLE,
         "provider": provider,
         "model_key": has_key,
         # Открыто ли сейчас окно К+. Пока открыто — сеанс занят, и второй
         # вход в К+ где угодно ещё будет считаться вторым пользователем.
         "session_open": browser._cdp_alive(),
+        "build": VERSION,
     })
 
 

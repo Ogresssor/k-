@@ -26,6 +26,7 @@ CDP_PORT="${CDP_PORT:-9333}"
 LEFTOVERS=(
   "$HOME/.kplus-agent|данные и профиль браузера старых версий"
   "$HOME/Library/Logs/KPlusAgent|журнал старых версий"
+  "$HOME/Library/Application Support/KPlusAgent|данные, если программа лежала в «Программах»"
 )
 
 # Общий кеш Playwright. Наша старая версия качала туда Chromium, но папка

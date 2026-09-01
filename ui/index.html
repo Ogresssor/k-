@@ -128,6 +128,7 @@ const statusEl = document.getElementById("status");
 let base = null;
 let busy = false;
 let ready = false;
+let build = "";
 
 // В обычном браузере Tauri нет — тогда это предпросмотр интерфейса без агента.
 const tauri = window.__TAURI__ || null;
@@ -168,7 +169,8 @@ function fail(detail) {
   bubble("bot err",
     "Не удалось связаться с агентом.\n\n" + detail +
     "\n\nЗакройте приложение и откройте его заново. Если повторится — " +
-    "пришлите этот текст разработчику.");
+    "пришлите этот текст разработчику." +
+    (build ? "\n\nСборка: " + build : ""));
   report(false, detail);
 }
 
@@ -209,7 +211,10 @@ async function boot() {
         const name = (h.browser || "").split("/").pop();
         ready = true;
         statusEl.className = "status";
+        build = h.build || "";
         statusEl.textContent = name ? "готов · " + name : "готов · браузер не найден";
+        // Наведите курсор — видно версию и куда пишутся данные.
+        statusEl.title = "сборка " + build + "\nданные: " + (h.data_root || "?");
         setBusy(false);
         closeBtn.hidden = !h.session_open;
         report(true, name || "браузер не найден");
@@ -285,7 +290,8 @@ async function ask(task) {
       drain(await resp.text(), answer);
     }
   } catch (e) {
-    render(answer, { kind: "error", text: "Не получилось: " + e });
+    render(answer, { kind: "error", text: "Не получилось: " + e +
+                     (build ? "\n\nСборка: " + build : "") });
   }
   statusEl.textContent = "готов";
   setBusy(false);
