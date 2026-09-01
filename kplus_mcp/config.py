@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import plistlib
 import sys
 from pathlib import Path
 
@@ -233,14 +234,51 @@ _DEV_PATHS = (
 )
 
 
+def _is_browser(app: Path) -> bool:
+    """Настоящий браузер или просто программа на Chromium.
+
+    Одного признака «внутри лежит Chromium» мало: на нём собраны Electron
+    и всё, что из него растёт — Claude, Slack, VS Code, Discord, Notion.
+    Такая проверка однажды выбрала браузером Claude Desktop, и окно К+,
+    разумеется, не открылось.
+
+    Отличие в том, что настоящий браузер объявляет себя обработчиком
+    ссылок http и https — это записано в его Info.plist. Ни одна
+    программа на Electron этого не делает.
+    """
+    frameworks = app / "Contents" / "Frameworks"
+    if not frameworks.is_dir():
+        return False
+    try:
+        names = [f.name for f in frameworks.iterdir()]
+    except OSError:
+        return False
+
+    # Движок Chromium есть, но у Electron он называется именно так.
+    if not any(n.endswith(" Framework.framework") for n in names):
+        return False
+    if "Electron Framework.framework" in names:
+        return False
+
+    try:
+        with (app / "Contents" / "Info.plist").open("rb") as fh:
+            info = plistlib.load(fh)
+    except (OSError, ValueError):
+        return False
+
+    for entry in info.get("CFBundleURLTypes") or []:
+        schemes = [str(x).lower() for x in (entry.get("CFBundleURLSchemes") or [])]
+        if "http" in schemes or "https" in schemes:
+            return True
+    return False
+
+
 def _scan_applications() -> list[str]:
-    """Найти на маке любой браузер на движке Chromium, даже неизвестный нам.
+    """Найти на маке любой установленный браузер на движке Chromium.
 
     Скачивать мы ничего не будем никогда, поэтому список известных имён —
-    это только приоритет, а не ограничение. Все сборки Chromium устроены
-    одинаково: внутри .app лежит папка Frameworks, а в ней фреймворк с
-    именем вида «Google Chrome Framework.framework». Ни у Safari, ни у
-    Firefox, ни у обычных программ такого нет — признак надёжный.
+    это только приоритет, а не ограничение: подойдёт и браузер, о котором
+    мы не слышали. Проверяет каждого кандидата _is_browser.
     """
     found: list[str] = []
     for folder in (Path("/Applications"), Path.home() / "Applications"):
@@ -251,17 +289,7 @@ def _scan_applications() -> list[str]:
         except OSError:
             continue
         for app in entries:
-            if app.suffix != ".app":
-                continue
-            frameworks = app / "Contents" / "Frameworks"
-            if not frameworks.is_dir():
-                continue
-            try:
-                chromium = any(f.name.endswith(" Framework.framework")
-                               for f in frameworks.iterdir())
-            except OSError:
-                continue
-            if not chromium:
+            if app.suffix != ".app" or not _is_browser(app):
                 continue
             binary = app / "Contents" / "MacOS" / app.stem
             if os.access(binary, os.X_OK):

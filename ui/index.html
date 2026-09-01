@@ -174,6 +174,23 @@ function fail(detail) {
   report(false, detail);
 }
 
+function noBrowser() {
+  statusEl.className = "status bad";
+  statusEl.textContent = "нет браузера";
+  if (hint) hint.remove();
+  bubble("bot err",
+    "На этом компьютере нет ни одного браузера на движке Chromium, " +
+    "а без него программа не может открыть КонсультантПлюс.\n\n" +
+    "Поставьте Google Chrome обычным способом — google.com/chrome — " +
+    "и откройте программу заново. Скачивать браузер сама она не умеет " +
+    "и не будет.\n\n" +
+    "Подойдёт любой из установленных: Chrome, Edge, Brave, Vivaldi, " +
+    "Yandex, Arc, Comet. Программы вроде Claude, Slack или VS Code не " +
+    "подходят: они собраны на том же движке, но браузерами не являются." +
+    (build ? "\n\nСборка: " + build : ""));
+  report(false, "браузер не найден");
+}
+
 // Докладываем в Rust, чем кончился запуск: иначе сбой выглядит как вечное
 // «запускаю…», и проверка в CI считает такой запуск успешным.
 function report(ok, detail) {
@@ -212,9 +229,18 @@ async function boot() {
         ready = true;
         statusEl.className = "status";
         build = h.build || "";
-        statusEl.textContent = name ? "готов · " + name : "готов · браузер не найден";
         // Наведите курсор — видно версию и куда пишутся данные.
         statusEl.title = "сборка " + build + "\nданные: " + (h.data_root || "?");
+
+        if (!name) {
+          // Говорить «готов», когда работать нечем, — обман. Без браузера
+          // агент не сможет открыть К+, и лучше сказать об этом сразу,
+          // а не после первого вопроса.
+          noBrowser();
+          return;
+        }
+        statusEl.className = "status";
+        statusEl.textContent = "готов · " + name;
         setBusy(false);
         closeBtn.hidden = !h.session_open;
         report(true, name || "браузер не найден");
